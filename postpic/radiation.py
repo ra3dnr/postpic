@@ -16,7 +16,7 @@
 #
 # Vasily Kharin, 2017
 """
-Reconstructing the far field spectrum using Lienartd Wiechert potentials
+Reconstructing the far field spectrum using Lienard Wiechert potentials
 """
 
 import numpy as np
@@ -25,7 +25,7 @@ import numpy as np
 __all__ = ['lienard_wiechert']
 
 
-def lienard_wiechert(trajs, n)
+def lienard_wiechert(trajs, n):
     """
     Returns the spectrum of the radiation in the direction of vector n
     """
@@ -34,7 +34,27 @@ def lienard_wiechert(trajs, n)
     return 0
 
 
-def single_dir_amplitudes(trajs, freqs, basis)
+def amplitudes(trajs, freqs, thetas, phis):
+    """
+    Returns 4d array of amplitudes on the detector grid
+    """
+    res = []
+    for p in phis:
+        res_t = []
+        for t in thetas:
+            # "almost" holonomic basis in spherical coordinates
+            basis = np.array([
+                [np.sin(t) * np.cos(p), np.sin(t) * np.sin(p), np.cos(t)],
+                [np.cos(t) * np.cos(p), np.cos(t) * np.sin(p), -np.sin(t)],
+                [np.sin(p), -np.cos(p), 0.]])
+            res_t.append(single_dir_amplitudes(trajs, freqs, basis))
+        res.append(res_t)
+
+    res = np.array(res)
+    return res
+
+
+def single_dir_amplitudes(trajs, freqs, basis):
     """
     Returns the complex amplitudes of the radiation in the direction of
     basis[0] interpolated on the frequency grid freqs.
@@ -50,7 +70,7 @@ def single_dir_amplitudes(trajs, freqs, basis)
         # Calculate the spectrum produced by the particle
         freqs_old, As = _single_traj_vect_pot(xs, us, basis[0])
 
-        # Project onto the transverse direction
+        # Project on the transverse direction
         projected = [np.dot(basis[i], As), for i in [1, 2]]
 
         # Interpolate on the desired grid
@@ -114,7 +134,7 @@ def _single_traj_vect_pot(xs, us, n)
                for i in [1, 2, 3]]
 
     # Get the transformed vector potential and frequencies
-    As = np.fft.fft(At_even) * (zs_even[-1] - zs_even[0])
+    As = np.fft.fft(At_even) * (zs_even[1] - zs_even[0])
     freqs = np.fft.fftfreq(len(zs_even), (zs_even[1] - zs_even[0]) / 2 / np.pi)
 
     # Return non-negative frequencies and corresponding components of vector
