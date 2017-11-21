@@ -59,10 +59,10 @@ def single_dir_amplitudes(trajs, freqs, basis):
     Returns the complex amplitudes of the radiation in the direction of
     basis[0] interpolated on the frequency grid freqs.
     basis[1,2] are the basis vectors for decomposition. Everything is
-    supposed to be orthonormalized. 
+    supposed to be orthonormalized.
     """
 
-    res = np.zeros( (2,len(freqs)), dtype=np.complex)
+    res = np.zeros((2, len(freqs)), dtype=np.complex)
 
     for t in trajs:
         xs, us = t
@@ -106,28 +106,30 @@ def _deduce_freq_grid(trajs, n):
 
     return np.linspace(0., 1. / fdz, int(fzmax / fdz) + 1)
 
+
 def _pad_traj(xs, us, N):
     """
     Pads the trjectories with N points left and N points right such that the
     particle is assumed to move uniformly
     """
-    dx = xs[:,1] - xs[:,0]
-    ds = np.sqrt( dx[0]**2 - np.sum( dx[1:]**2))
-    proper_ts = np.linspace(-ds*N,-ds,N)
-    left_x = proper_ts[:,None]*u[:,0] + xs[:,0][None,:]
+    dx = xs[:, 1] - xs[:, 0]
+    ds = np.sqrt(dx[0]**2 - np.sum(dx[1:]**2))
+    proper_ts = np.linspace(-ds * N, -ds, N)
+    left_x = proper_ts[:, None] * u[:, 0] + xs[:, 0][None, :]
 
-    dx = xs[:,-1] - xs[:,-2]
-    ds = np.sqrt( dx[0]**2 - np.sum( dx[1:]**2))
-    proper_ts = np.linspace(ds,ds*N,N)
-    right_x = proper_ts[:,None]*u[:,-1] + xs[:,-1][None,:]
+    dx = xs[:, -1] - xs[:, -2]
+    ds = np.sqrt(dx[0]**2 - np.sum(dx[1:]**2))
+    proper_ts = np.linspace(ds, ds * N, N)
+    right_x = proper_ts[:, None] * u[:, -1] + xs[:, -1][None, :]
     xs = np.concatenate((left_x, xs, right_x))
 
-    left_u = np.repeat(us[:,0][:,np.newaxis],N,axis=1)
-    right_u = np.repeat(us[:,-1][:,np.newaxis],N,axis=1)
+    left_u = np.repeat(us[:, 0][:, np.newaxis], N, axis=1)
+    right_u = np.repeat(us[:, -1][:, np.newaxis], N, axis=1)
 
-    us = np.concatenate((left_u,us,right_u))
-    
+    us = np.concatenate((left_u, us, right_u))
+
     return xs, us
+
 
 def _interp_cplx(x, xp, fp, left=0., right=0.):
     """
@@ -138,12 +140,12 @@ def _interp_cplx(x, xp, fp, left=0., right=0.):
     pl, pr = np.angle(left), np.angle(right)
     rs = np.absolute(fp)
     ps = np.angle(fp)
-    return np.interp(x,xp,rs, left = rl, right = rr)*\
-                np.exp(1j*np.interp(x,xp,ps, left = pl, right= pr))
+    return np.interp(x, xp, rs, left=rl, right=rr) *\
+        np.exp(1j * np.interp(x, xp, ps, left=pl, right=pr))
 
 
 def _single_traj_vect_pot(xs, us, n):
-    """ 
+    """
     Returns the frequency and spectrum of the vector-potential in the direction
     of vector n for a single particle. xs[:,0] is time, xs[:,1,2,3] are the
     space components of the coordinate. Similar to us[:,:] which are the
@@ -156,7 +158,7 @@ def _single_traj_vect_pot(xs, us, n):
 
     # Vector potential depending on the lab time
     denoms = 1. / (us[:, 0] - np.dot(us[:, 1:], n))
-    At = us[:,1:] * denoms[:,None]
+    At = us[:, 1:] * denoms[:, None]
 
     # Get the timestep for the retarded time
     dz = np.min(np.diff(zs))
@@ -165,7 +167,7 @@ def _single_traj_vect_pot(xs, us, n):
     zs_even = np.linspace(zs[0], zs[-1], int((zs[-1] - zs[0]) / dz) + 1)
 
     # Interpolate the vector potential on evenly distributed grid
-    At_even = [np.interp(zs_even, zs, At[:,i], left=0., right=0.)
+    At_even = [np.interp(zs_even, zs, At[:, i], left=0., right=0.)
                for i in [0, 1, 2]]
 
     # Get the transformed vector potential and frequencies
