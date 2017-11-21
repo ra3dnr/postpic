@@ -34,14 +34,32 @@ def lienard_wiechert(trajs, n)
 
     return 0
 
-def amplitudes(trajs, basis)
+def single_dir_amplitudes(trajs, freqs, basis)
     """
-    Returns the complex amplitudes of the radiation in the direction of basis[0].
+    Returns the complex amplitudes of the radiation in the direction of
+    basis[0] interpolated on the frequency grid freqs.
     basis[1,2] are the basis vectors for decomposition. Everything is
-    supposed to be orthonormalized
+    supposed to be orthonormalized. 
     """
+    res = np.zeros((frqs.shape,2), dtype=np.complex)
 
-    return 0
+    for t in trajs:
+        xs, us = t
+
+        # Calculate the spectrum produced by the particle
+        freqs_old, As = _single_traj_vect_pot(xs, us, basis[0])
+
+        # Project onto the transverse direction
+        projected = [ np.dot(basis[i], As), for i in [1,2] ]
+
+        # Interpolate on the desired grid
+        As_interp = np.array([ np.interp(freqs, freqs_old, p, left=0., right=0.)
+            for p in projected ])
+
+        # Add the contribution
+        res += As_interp
+
+    return res
 
 def _deduce_freq_grid(trajs, n):
     """
