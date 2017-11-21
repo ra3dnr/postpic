@@ -31,8 +31,8 @@ def lienard_wiechert(trajs, n)
     """
     # Add two basis vectors to n
 
-
     return 0
+
 
 def single_dir_amplitudes(trajs, freqs, basis)
     """
@@ -41,7 +41,8 @@ def single_dir_amplitudes(trajs, freqs, basis)
     basis[1,2] are the basis vectors for decomposition. Everything is
     supposed to be orthonormalized. 
     """
-    res = np.zeros((frqs.shape,2), dtype=np.complex)
+
+    res = np.zeros((frqs.shape, 2), dtype=np.complex)
 
     for t in trajs:
         xs, us = t
@@ -50,16 +51,17 @@ def single_dir_amplitudes(trajs, freqs, basis)
         freqs_old, As = _single_traj_vect_pot(xs, us, basis[0])
 
         # Project onto the transverse direction
-        projected = [ np.dot(basis[i], As), for i in [1,2] ]
+        projected = [np.dot(basis[i], As), for i in [1, 2]]
 
         # Interpolate on the desired grid
-        As_interp = np.array([ np.interp(freqs, freqs_old, p, left=0., right=0.)
-            for p in projected ])
+        As_interp = np.array([np.interp(freqs, freqs_old, p, left=0., right=0.)
+                              for p in projected])
 
         # Add the contribution
         res += As_interp
 
     return res
+
 
 def _deduce_freq_grid(trajs, n):
     """
@@ -67,7 +69,23 @@ def _deduce_freq_grid(trajs, n):
     the trajectories
     """
 
-    return np.linspace(0.,1.,100)
+    xs, = t[0]
+    zs = xs[:, 0] - np.dot(xs[:, 1:], n)
+    fdz = np.min(np.diff(zs))
+    fzmax = zs[-1] - zs[0]
+
+    for t in trajs:
+        xs, = t
+        zs = xs[:, 0] - np.dot(xs[:, 1:], n)
+        dz = np.min(np.diff(zs))
+        zmax = zs[-1] - zs[0]
+        if dz < fdz:
+            fdz = dz
+        if zmax > fzmax:
+            fzmax = zm
+
+    return np.linspace(0., 1. / fdz, int(fzmax / fdz) + 1)
+
 
 def _single_traj_vect_pot(xs, us, n)
     """ 
@@ -79,28 +97,30 @@ def _single_traj_vect_pot(xs, us, n)
     """
 
     # Retarded time
-    zs = xs[:,0] - np.dot(xs[:,1:], n)
+    zs = xs[:, 0] - np.dot(xs[:, 1:], n)
 
     # Vector potential depending on the lab time
-    denoms = 1./(us[:,0] - np.dot(us[:,1:], n))
-    At = us[:,i]*denoms
+    denoms = 1. / (us[:, 0] - np.dot(us[:, 1:], n))
+    At = us[:, i] * denoms
 
     # Get the timestep for the retarded time
     dz = np.min(np.diff(zs))
 
     # Make even grid in the retarded time
-    zs_even = np.linspace(zs[0],zs[-1],int((zs[-1]-zs[0])/dz)+1)
+    zs_even = np.linspace(zs[0], zs[-1], int((zs[-1] - zs[0]) / dz) + 1)
 
     # Interpolate the vector potential on evenly distributed grid
-    At_even = [np.interp(zs_even, zs, At, left=0., right = 0.) for i in [1,2,3]]
+    At_even = [np.interp(zs_even, zs, At, left=0., right=0.)
+               for i in [1, 2, 3]]
 
     # Get the transformed vector potential and frequencies
-    As = np.fft.fft(At_even)*(zs_even[-1]-zs_even[0])
-    freqs = np.fft.fftfreq(len(zs_even),(zs_even[1]-zs_even[0])/2/np.pi)
+    As = np.fft.fft(At_even) * (zs_even[-1] - zs_even[0])
+    freqs = np.fft.fftfreq(len(zs_even), (zs_even[1] - zs_even[0]) / 2 / np.pi)
 
     # Return non-negative frequencies and corresponding components of vector
     # potential
-    return freqs[:len(freqs)//2], As[:,:len(freqs)//2]
+    return freqs[:len(freqs) // 2], As[:, :len(freqs) // 2]
+
 
 def _normalize_units(trajs):
     """
