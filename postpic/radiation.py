@@ -106,6 +106,29 @@ def _deduce_freq_grid(trajs, n):
 
     return np.linspace(0., 1. / fdz, int(fzmax / fdz) + 1)
 
+def _pad_traj(xs, us, N):
+    """
+    Pads the trjectories with N points left and N points right such that the
+    particle is assumed to move uniformly
+    """
+    dx = xs[:,1] - xs[:,0]
+    ds = np.sqrt( dx[0]**2 - np.sum( dx[1:]**2))
+    proper_ts = np.linspace(-ds*N,-ds,N)
+    left_x = proper_ts[:,None]*u[:,0] + xs[:,0][None,:]
+
+    dx = xs[:,-1] - xs[:,-2]
+    ds = np.sqrt( dx[0]**2 - np.sum( dx[1:]**2))
+    proper_ts = np.linspace(ds,ds*N,N)
+    right_x = proper_ts[:,None]*u[:,-1] + xs[:,-1][None,:]
+    xs = np.concatenate((left_x, xs, right_x))
+
+    left_u = np.repeat(us[:,0][:,np.newaxis],N,axis=1)
+    right_u = np.repeat(us[:,-1][:,np.newaxis],N,axis=1)
+
+    us = np.concatenate((left_u,us,right_u))
+    
+    return xs, us
+
 
 def _single_traj_vect_pot(xs, us, n)
     """ 
