@@ -22,7 +22,7 @@ Reconstructing the far field spectrum using Lienard Wiechert potentials
 import numpy as np
 
 
-__all__ = ['lienard_wiechert']
+__all__ = ['lienard_wiechert', 'amplitudes']
 
 
 def lienard_wiechert(trajs, n):
@@ -62,7 +62,7 @@ def single_dir_amplitudes(trajs, freqs, basis):
     supposed to be orthonormalized. 
     """
 
-    res = np.zeros((frqs.shape, 2), dtype=np.complex)
+    res = np.zeros( (2,len(freqs)), dtype=np.complex)
 
     for t in trajs:
         xs, us = t
@@ -71,10 +71,10 @@ def single_dir_amplitudes(trajs, freqs, basis):
         freqs_old, As = _single_traj_vect_pot(xs, us, basis[0])
 
         # Project on the transverse direction
-        projected = [np.dot(basis[i], As), for i in [1, 2]]
+        projected = [np.dot(basis[i], As) for i in [1, 2]]
 
         # Interpolate on the desired grid
-        As_interp = np.array([np.interp(freqs, freqs_old, p, left=0., right=0.)
+        As_interp = np.array([_interp_cplx(freqs, freqs_old, p, left=0., right=0.)
                               for p in projected])
 
         # Add the contribution
@@ -129,8 +129,20 @@ def _pad_traj(xs, us, N):
     
     return xs, us
 
+def _interp_cplx(x, xp, fp, left=0., right=0.):
+    """
+    Smooth interpolation for the spectrum
+    """
+    # TODO: Looks like very unoptimal. Rewrite.
+    rl, rr = np.absolute(left), np.absolute(right)
+    pl, pr = np.angle(left), np.angle(right)
+    rs = np.absolute(fp)
+    ps = np.angle(fp)
+    return np.interp(x,xp,rs, left = rl, right = rr)*\
+                np.exp(1j*np.interp(x,xp,ps, left = pl, right= pr))
 
-def _single_traj_vect_pot(xs, us, n)
+
+def _single_traj_vect_pot(xs, us, n):
     """ 
     Returns the frequency and spectrum of the vector-potential in the direction
     of vector n for a single particle. xs[:,0] is time, xs[:,1,2,3] are the
@@ -144,7 +156,7 @@ def _single_traj_vect_pot(xs, us, n)
 
     # Vector potential depending on the lab time
     denoms = 1. / (us[:, 0] - np.dot(us[:, 1:], n))
-    At = us[:, i] * denoms
+    At = us[:,1:] * denoms[:,None]
 
     # Get the timestep for the retarded time
     dz = np.min(np.diff(zs))
@@ -153,8 +165,8 @@ def _single_traj_vect_pot(xs, us, n)
     zs_even = np.linspace(zs[0], zs[-1], int((zs[-1] - zs[0]) / dz) + 1)
 
     # Interpolate the vector potential on evenly distributed grid
-    At_even = [np.interp(zs_even, zs, At, left=0., right=0.)
-               for i in [1, 2, 3]]
+    At_even = [np.interp(zs_even, zs, At[:,i], left=0., right=0.)
+               for i in [0, 1, 2]]
 
     # Get the transformed vector potential and frequencies
     As = np.fft.fft(At_even) * (zs_even[1] - zs_even[0])
