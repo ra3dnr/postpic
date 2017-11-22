@@ -55,7 +55,7 @@ def lienard_wiechert(trajs, freqs, theta, phi):
 def lw_amplitudes(trajs, freqs, thetas, phis, verboselevel=0):
     """
     Returns two 3d array of amplitudes on the detector grid: for polarization
-    alog theta and along phi respectively. The order of indeces is 
+    alog theta and along phi respectively. The order of indeces is
     (phi, theta, omega)
     verboselevel parameter stands for printing the current status:
     0 - no printing
@@ -193,10 +193,8 @@ def _spherical_basis(theta, phi):
     basis[2] - along phi
     """
     return np.array([
-        [np.sin(theta) * np.cos(phi), np.sin(theta)
-         * np.sin(phi), np.cos(theta)],
-        [np.cos(theta) * np.cos(phi), np.cos(theta)
-         * np.sin(phi), -np.sin(theta)],
+        [np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi), np.cos(theta)],
+        [np.cos(theta) * np.cos(phi), np.cos(theta) * np.sin(phi), -np.sin(theta)],
         [np.sin(phi), -np.cos(phi), 0.]])
 
 
