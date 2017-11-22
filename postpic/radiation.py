@@ -25,9 +25,9 @@ How it works:
     + Interpolate the four-velocities from the retarded time to the evenly
     spaced time grid for given direction
     + Sum the contributions from different particles
-    + Fourier transform them to get the spectrum
     + Project potentials on the transverse direction to get rid of
-    electrostatics
+    electrostatics and reduce to two components
+    + Fourier transform them to get the spectrum
     + Interpolate the result on user-defined frequency grid
     + Multiply by frequency to pass from the potential to the field
     + Convert back to dimensional units
@@ -37,21 +37,26 @@ How it works:
 import numpy as np
 
 
-__all__ = ['lienard_wiechert', 'amplitudes', 'single_dir_amplitudes']
+__all__ = ['lienard_wiechert', 'lw_amplitudes', 'single_dir_amplitudes']
 
 
-def lienard_wiechert(trajs, n):
+def lienard_wiechert(trajs, freqs, theta, phi):
     """
-    Returns the spectrum of the radiation in the direction of vector n
+    Returns the spectral intensity of the radiation in the direction given by
+    the angles (theta, phi)
     """
-    # Add two basis vectors to n
+    basis = _spherical_basis(theta, phi)
+    # Calculate the spectrum for given direction
+    Es = single_dir_amplitudes(trajs, freqs, basis)
 
-    return 0
+    return np.absolute(Es[0])**2 + np.absolute(Es[1])**2
 
 
-def amplitudes(trajs, freqs, thetas, phis, verboselevel=0):
+def lw_amplitudes(trajs, freqs, thetas, phis, verboselevel=0):
     """
-    Returns 4d array of amplitudes on the detector grid
+    Returns two 3d array of amplitudes on the detector grid: for polarization
+    alog theta and along phi respectively. The order of indeces is 
+    (phi, theta, omega)
     verboselevel parameter stands for printing the current status:
     0 - no printing
     1 - print only the angle iteration info
@@ -69,11 +74,7 @@ def amplitudes(trajs, freqs, thetas, phis, verboselevel=0):
     for p in phis:
         res_t = []
         for t in thetas:
-            # "almost" holonomic basis in spherical coordinates
-            basis = np.array([
-                [np.sin(t) * np.cos(p), np.sin(t) * np.sin(p), np.cos(t)],
-                [np.cos(t) * np.cos(p), np.cos(t) * np.sin(p), -np.sin(t)],
-                [np.sin(p), -np.cos(p), 0.]])
+            basis = _spherical_basis(t, p)
             # Calculate the spectrum for given direction
             res_t.append(single_dir_amplitudes(
                 trajs, freqs, basis, verbose=(verboselevel > 1)))
@@ -82,7 +83,7 @@ def amplitudes(trajs, freqs, thetas, phis, verboselevel=0):
         res.append(res_t)
 
     res = np.array(res)
-    return res
+    return res[:, :, 0, :], res[:, :, 1, :]
 
 
 def single_dir_amplitudes(trajs, freqs, basis, verbose=False):
@@ -126,9 +127,12 @@ def single_dir_amplitudes(trajs, freqs, basis, verbose=False):
 
         traj_count += 1
 
+    # Project on the transverse direction
+    projected = [np.dot(basis[i], vect_pot) for i in [1, 2]]
+
     # Get the transformed vector potential and the frequencies
     verboseprint("\nFourier transform..")
-    As = np.fft.fft(vect_pot, axis=1) * (zs_even[1] - zs_even[0])
+    As = np.fft.fft(projected) * (zs_even[1] - zs_even[0])
     freqs_old = np.fft.fftfreq(
         len(zs_even), (zs_even[1] - zs_even[0]) / 2 / np.pi)
 
@@ -136,13 +140,10 @@ def single_dir_amplitudes(trajs, freqs, basis, verbose=False):
     As = As[:, :len(freqs_old) // 2]
     freqs_old = freqs_old[0:len(freqs_old) // 2]
 
-    # Project on the transverse direction
-    projected = [np.dot(basis[i], As) for i in [1, 2]]
-
     # Interpolate on the desired frequency grid and multipy by frequency to pass
     # from the potential to the field
-    res = np.array([_interp_cplx(freqs, freqs_old, p, left=0., right=0.) * freqs
-                    for p in projected])
+    res = np.array([_interp_cplx(freqs, freqs_old, a, left=0., right=0.) * freqs
+                    for a in As])
 
     return res
 
@@ -168,7 +169,7 @@ def _deduce_ret_time_grid(trajs, n):
 
     # Repeat for all the particles. Take the maximal grid
     for t in trajs[1:]:
-        xs, = t
+        xs = t[0]
         zs = xs[:, 0] - np.dot(xs[:, 1:], n)
         dz = np.min(np.diff(zs))
         zmax = zs[-1]
@@ -184,9 +185,24 @@ def _deduce_ret_time_grid(trajs, n):
     return np.linspace(fzmin, fzmax, int((fzmax - fzmin) / fdz) + 1)
 
 
+def _spherical_basis(theta, phi):
+    """
+    Return the triple of orthonormal basis vectors for the angle (theta, phi):
+    basis[0] - along radius
+    basis[1] - along theta
+    basis[2] - along phi
+    """
+    return np.array([
+        [np.sin(theta) * np.cos(phi), np.sin(theta)
+         * np.sin(phi), np.cos(theta)],
+        [np.cos(theta) * np.cos(phi), np.cos(theta)
+         * np.sin(phi), -np.sin(theta)],
+        [np.sin(phi), -np.cos(phi), 0.]])
+
+
 def _interp_cplx(x, xp, fp, left=0., right=0.):
     """
-    Smooth interpolation for the spectrum. Since it is complex-valued, and the
+    Interpolation for the spectrum. Since it is complex-valued, and the
     phase can be rapidly changing, interpolates absolute values and phases
     separately.
     """
