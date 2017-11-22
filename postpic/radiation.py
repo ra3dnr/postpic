@@ -40,19 +40,19 @@ import numpy as np
 __all__ = ['lienard_wiechert', 'lw_amplitudes', 'single_dir_amplitudes']
 
 
-def lienard_wiechert(trajs, freqs, theta, phi):
+def lienard_wiechert(trajs, freqs, theta, phi, charges=np.array([])):
     """
     Returns the spectral intensity of the radiation in the direction given by
     the angles (theta, phi)
     """
     basis = _spherical_basis(theta, phi)
     # Calculate the spectrum for given direction
-    Es = single_dir_amplitudes(trajs, freqs, basis)
+    Es = single_dir_amplitudes(trajs, freqs, basis, charges=charges)
 
     return np.absolute(Es[0])**2 + np.absolute(Es[1])**2
 
 
-def lw_amplitudes(trajs, freqs, thetas, phis, verboselevel=0):
+def lw_amplitudes(trajs, freqs, thetas, phis, charges=np.array([]), verboselevel=0):
     """
     Returns two 3d array of amplitudes on the detector grid: for polarization
     alog theta and along phi respectively. The order of indeces is
@@ -77,7 +77,7 @@ def lw_amplitudes(trajs, freqs, thetas, phis, verboselevel=0):
             basis = _spherical_basis(t, p)
             # Calculate the spectrum for given direction
             res_t.append(single_dir_amplitudes(
-                trajs, freqs, basis, verbose=(verboselevel > 1)))
+                trajs, freqs, basis, verbose=(verboselevel > 1), charges=charges))
             verboseprint("(%f, %f)" % (t, p), end=" ")
         verboseprint("\n")
         res.append(res_t)
@@ -86,7 +86,7 @@ def lw_amplitudes(trajs, freqs, thetas, phis, verboselevel=0):
     return res[:, :, 0, :], res[:, :, 1, :]
 
 
-def single_dir_amplitudes(trajs, freqs, basis, verbose=False):
+def single_dir_amplitudes(trajs, freqs, basis, charges=np.array([]), verbose=False):
     """
     Returns the complex amplitudes of the radiation in the direction of
     basis[0] interpolated on the frequency grid freqs.
@@ -110,7 +110,11 @@ def single_dir_amplitudes(trajs, freqs, basis, verbose=False):
     # Counter for the verbose mode
     traj_count = 0
 
-    for t in trajs:
+    # If no charges given, set them to unity
+    if not charges.size:
+        charges = np.full(len(trajs), 1.)
+
+    for t, q in zip(trajs, charges):
         verboseprint(traj_count, end=" ")
         xs, us = t
 
@@ -136,8 +140,8 @@ def single_dir_amplitudes(trajs, freqs, basis, verbose=False):
     freqs_old = np.fft.fftfreq(
         len(zs_even), (zs_even[1] - zs_even[0]) / 2 / np.pi)
 
-    # We only need non-negative frequencies
-    As = As[:, :len(freqs_old) // 2]
+    # We only need non-negative frequencies. Also multiply by charge
+    As = As[:, :len(freqs_old) // 2] * q
     freqs_old = freqs_old[0:len(freqs_old) // 2]
 
     # Interpolate on the desired frequency grid and multipy by frequency to pass
@@ -193,8 +197,10 @@ def _spherical_basis(theta, phi):
     basis[2] - along phi
     """
     return np.array([
-        [np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi), np.cos(theta)],
-        [np.cos(theta) * np.cos(phi), np.cos(theta) * np.sin(phi), -np.sin(theta)],
+        [np.sin(theta) * np.cos(phi), np.sin(theta)
+         * np.sin(phi), np.cos(theta)],
+        [np.cos(theta) * np.cos(phi), np.cos(theta)
+         * np.sin(phi), -np.sin(theta)],
         [np.sin(phi), -np.cos(phi), 0.]])
 
 
@@ -212,15 +218,21 @@ def _interp_cplx(x, xp, fp, left=0., right=0.):
         np.exp(1j * np.interp(x, xp, ps, left=pl, right=pr))
 
 
-def _normalize_units(trajs):
+def _normalize_units(particles):
     """
     Converts incomplete data in SI units to complete arrays xs,us with the same
-    spacetime scale.
+    spacetime scale. Charge is in SI units.
     Returns xs, us, [normalization factor for time, for space, for spectral intensity].
     """
-    intNorm = 1.
-    spaceNorm = 1.
-    timeNorm = 1.
-    xs = []
-    us = []
-    return xs, us, [timeNorm, spaceNorm, intNorm]
+    # epsilon_0
+    eps0 = 1.2566370614e-6
+    # We will measure time in meters
+    intNorm = (1. / 4 / np.pi)**2 / eps0
+
+    data = particles.collect('t*c', 'x', 'y', 'z', 'gamma', 'gamma*beta_x',
+                             'gamma*beta_y', 'gamma*beta_z', 'q')
+
+    trajs = [(d[:4], d[4:8, :]) for d in data]
+    charges = np.array([d[8] for d in data])
+
+    return trajs, charges, intNorm
