@@ -197,10 +197,8 @@ def _spherical_basis(theta, phi):
     basis[2] - along phi
     """
     return np.array([
-        [np.sin(theta) * np.cos(phi), np.sin(theta)
-         * np.sin(phi), np.cos(theta)],
-        [np.cos(theta) * np.cos(phi), np.cos(theta)
-         * np.sin(phi), -np.sin(theta)],
+        [np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi), np.cos(theta)],
+        [np.cos(theta) * np.cos(phi), np.cos(theta) * np.sin(phi), -np.sin(theta)],
         [np.sin(phi), -np.cos(phi), 0.]])
 
 
