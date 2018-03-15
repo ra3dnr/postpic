@@ -35,34 +35,42 @@ How it works:
 """
 
 import numpy as np
+import pyfftw
+
+try:
+    import datahandling
+    import particles
+except ImportError:
+    pass
 
 
 __all__ = ['lienard_wiechert', 'lw_amplitudes', 'single_dir_amplitudes']
 
 
-def lienard_wiechert(trajs, freqs, theta, phi, charges=np.array([])):
+def lienard_wiechert(trajs, theta, phi, charges=np.array([])):
     """
-    Returns the spectral intensity of the radiation in the direction given by
-    the angles (theta, phi)
+    Returns the frequency grid and the spectral photon density of the radiation
+    in the direction given by the angles (theta, phi).
     """
     basis = _spherical_basis(theta, phi)
     # Calculate the spectrum for given direction
-    Es = single_dir_amplitudes(trajs, freqs, basis, charges=charges)
+    res_freqs, Es = single_dir_amplitudes(trajs, basis, charges=charges)
 
-    return np.absolute(Es[0])**2 + np.absolute(Es[1])**2
+    return res_freqs, (np.absolute(Es[0])**2 +
+            np.absolute(Es[1])**2)/137/4/np.pi**2*res_freqs
 
 
 def lw_amplitudes(trajs, freqs, thetas, phis, charges=np.array([]), verboselevel=0):
     """
-    Returns two 3d array of amplitudes on the detector grid: for polarization
-    alog theta and along phi respectively. The order of indeces is
-    (phi, theta, omega)
+    Returns two 3d array of vector potential spectral amplitudes on the detector
+    grid: for polarization alog theta and along phi respectively. The order of
+    indeces is (phi, theta, omega)
     verboselevel parameter stands for printing the current status:
     0 - no printing
     1 - print only the angle iteration info
     >1 - print also the log for every direction
     """
-    # Get ready for debugging
+    # debugging
     verboseprint = print if verboselevel else lambda *a, **k: None
 
     res = []
@@ -76,8 +84,8 @@ def lw_amplitudes(trajs, freqs, thetas, phis, charges=np.array([]), verboselevel
         for t in thetas:
             basis = _spherical_basis(t, p)
             # Calculate the spectrum for given direction
-            res_t.append(single_dir_amplitudes(
-                trajs, freqs, basis, verbose=(verboselevel > 1), charges=charges))
+            fr, sp = single_dir_amplitudes(trajs, basis, verbose=(verboselevel > 1), charges=charges)
+            res_t.append(np.array([_interp_cplx(freqs, fr, a, left=0., right=0.) for a in sp]))
             verboseprint("(%f, %f)" % (t, p), end=" ")
         verboseprint("\n")
         res.append(res_t)
@@ -85,16 +93,30 @@ def lw_amplitudes(trajs, freqs, thetas, phis, charges=np.array([]), verboselevel
     res = np.array(res)
     return res[:, :, 0, :], res[:, :, 1, :]
 
+def _get_opt_size(n):
+    """
+    finds the next number which is the product of powers of 2,3,5,7
+    """
+    def no_good(n):
+        primes = [2,3,5,7]
+        for p in primes:
+            while not n%p:
+                n = n//p
+        return n != 1
 
-def single_dir_amplitudes(trajs, freqs, basis, charges=np.array([]), verbose=False):
+    while no_good(n):
+        n += 1
+    return n
+
+def single_dir_amplitudes(trajs, basis, charges=np.array([]), verbose=False):
     """
-    Returns the complex amplitudes of the radiation in the direction of
-    basis[0] interpolated on the frequency grid freqs.
+    Returns the frequency grid and complex amplitudes of the radiation (transverse vector
+    potential) in the direction of basis[0].
     basis[1,2] are the basis vectors for decomposition. Everything is
-    supposed to be orthonormalized.
-    Verbose parameter stands for printing the current status.
+    supposed to be orthonormalized.  Verbose parameter stands for printing the
+    current status.
     """
-    # Get ready for the debugging
+    # debugging
     verboseprint = print if verbose else lambda *a, **k: None
 
     # Get the range of rearded times we are interested in
@@ -126,36 +148,36 @@ def single_dir_amplitudes(trajs, freqs, basis, charges=np.array([]), verbose=Fal
                                       left=us[0, i], right=us[-1, i]) for i in np.arange(4)])
 
         # Vector potential depending on the lab time
-        denoms = 1. / (us_even[0] - np.dot(basis[0], us_even[1:]))
+        denoms = q / (us_even[0] - np.dot(basis[0], us_even[1:]))
         vect_pot += us_even[1:, :] * denoms[None, :]
 
         traj_count += 1
 
+    # Plan the fft
+    projected = pyfftw.empty_aligned((2,len(zs_even)), dtype='float64')
+    As = pyfftw.empty_aligned((2,len(zs_even)//2+1), dtype='complex128')
+    fft_obj = pyfftw.FFTW(projected, As)
+
     # Project on the transverse direction
-    projected = [np.dot(basis[i], vect_pot) for i in [1, 2]]
+    projected[:,:] = np.array([np.dot(basis[i], vect_pot) for i in [1, 2]])
 
     # Get the transformed vector potential and the frequencies
     verboseprint("\nFourier transform..")
-    As = np.fft.fft(projected) * (zs_even[1] - zs_even[0])
-    freqs_old = np.fft.fftfreq(
-        len(zs_even), (zs_even[1] - zs_even[0]) / 2 / np.pi)
+    fft_obj()
 
-    # We only need non-negative frequencies. Also multiply by charge
-    As = As[:, :len(freqs_old) // 2] * q
-    freqs_old = freqs_old[0:len(freqs_old) // 2]
+    dz = zs_even[1] - zs_even[0]
+    As = As * dz
 
-    # Interpolate on the desired frequency grid and multipy by frequency to pass
-    # from the potential to the field
-    res = np.array([_interp_cplx(freqs, freqs_old, a, left=0., right=0.) * freqs
-                    for a in As])
+    freqs = 2*np.pi*np.linspace(0,len(zs_even)//2,len(zs_even)//2+1)/(dz*len(zs_even))
 
-    return res
+    return freqs, As
 
 
 def _deduce_ret_time_grid(trajs, n):
     """
     Returns the linspace for retarded time in given direction that captures all
-    the particles with the finest resolution needed
+    the particles with the finest resolution needed. Also takes care of fftw
+    padding.
     """
 
     # Values to start with: take from the first trajectory
@@ -186,7 +208,8 @@ def _deduce_ret_time_grid(trajs, n):
             fzmin = zmin
 
     # Return the retarded time grid as a numpy array
-    return np.linspace(fzmin, fzmax, int((fzmax - fzmin) / fdz) + 1)
+    num_pts = _get_opt_size(int((fzmax - fzmin) / fdz) + 1)
+    return np.linspace(fzmin, fzmax, num_pts)
 
 
 def _spherical_basis(theta, phi):
